@@ -1,0 +1,10 @@
+{
+  "name": "skills_router",
+  "private": true,
+  "description": "skill-router: the master skill that previews and runs the right skills for each engineering task",
+  "scripts": {
+    "test": "node --test",
+    "build:preview": "node preview/build.js"
+  },
+  "engines": { "node": ">=18" }
+}

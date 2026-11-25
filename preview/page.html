@@ -1,0 +1,526 @@
+<title>Request Preview</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+[hidden]{display:none!important}
+/* Layout: request list on the left; on the right a stage-banded flowchart (Intake → Learn, top to bottom) with the chosen path lit, then the step-by-step preview. */
+:root{
+  --bg:#f2f4f7; --panel:#ffffff; --ink:#17202b; --mute:#5c6777; --line:#d4dae3; --band:#e9edf2; --band2:#f4f6f9;
+  --accent:#2f5bea; --accent-ink:#fff; --path:#e8590c; --gate:#c2255c;
+  --l-builtin:#6a7383; --l-installed:#2f5bea; --l-ondemand:#0b8a8a; --l-tool:#b7791f; --l-yours:#7c3aed;
+  --f-display:"Bricolage Grotesque",ui-sans-serif,system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",ui-sans-serif,system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0e131a; --panel:#161d27; --ink:#e5eaf1; --mute:#98a4b5; --line:#2a3443; --band:#1a222d; --band2:#141b24;
+  --accent:#7d9bff; --accent-ink:#0e131a; --path:#ff8f4d; --gate:#ff6b9e;
+  --l-builtin:#9aa5b5; --l-installed:#7d9bff; --l-ondemand:#3fd0cf; --l-tool:#f0b44c; --l-yours:#b794ff; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e131a; --panel:#161d27; --ink:#e5eaf1; --mute:#98a4b5; --line:#2a3443; --band:#1a222d; --band2:#141b24;
+  --accent:#7d9bff; --accent-ink:#0e131a; --path:#ff8f4d; --gate:#ff6b9e;
+  --l-builtin:#9aa5b5; --l-installed:#7d9bff; --l-ondemand:#3fd0cf; --l-tool:#f0b44c; --l-yours:#b794ff; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5}
+.wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px;max-width:1560px;margin:0 auto;display:grid;gap:16px}
+h1{font:700 clamp(26px,4vw,38px)/1.1 var(--f-display);margin:0;letter-spacing:-.01em}
+.sub{margin:6px 0 0;color:var(--mute);max-width:76ch}
+button,input,select{font:inherit;color:inherit}
+button:focus-visible,input:focus-visible,select:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.ask{display:flex;gap:8px;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px}
+.ask input{flex:1 1 280px;min-width:0;font-size:16px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.btn{font-weight:600;padding:10px 16px;border-radius:8px;border:0;background:var(--accent);color:var(--accent-ink);cursor:pointer}
+.matched{flex-basis:100%;margin:0;color:var(--mute);font-size:13.5px}
+.layout{display:grid;grid-template-columns:270px minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:980px){.layout{grid-template-columns:minmax(0,1fr)}}
+.reqs{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px;display:grid;gap:2px;position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:auto}
+@media (max-width:980px){.reqs{position:static;max-height:none;grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}}
+.reqs h2{font:600 11.5px var(--f-mono);letter-spacing:.07em;text-transform:uppercase;color:var(--mute);margin:6px 8px}
+.req{display:grid;grid-template-columns:26px 1fr;gap:6px;align-items:baseline;text-align:left;padding:7px 8px;border-radius:8px;border:1px solid transparent;background:none;cursor:pointer}
+.req:hover{background:var(--band2)}
+.req[aria-current="true"]{background:color-mix(in srgb,var(--path) 12%,var(--panel));border-color:color-mix(in srgb,var(--path) 50%,transparent)}
+.req .n{font:600 12px var(--f-mono);color:var(--mute);font-variant-numeric:tabular-nums}
+.req b{font-weight:600;font-size:14px;display:block}
+.req small{color:var(--mute);font-size:12.5px;display:block;line-height:1.35}
+.col{display:grid;gap:14px;min-width:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;min-width:0}
+.head{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start}
+.head h2{font:700 24px/1.15 var(--f-display);margin:0}
+.head p{margin:4px 0 0;color:var(--mute)}
+.stats{display:flex;gap:8px;flex-wrap:wrap}
+.stat{border:1px solid var(--line);border-radius:8px;padding:6px 10px;min-width:84px}
+.stat b{display:block;font:600 20px var(--f-mono);font-variant-numeric:tabular-nums}
+.stat span{font-size:12px;color:var(--mute)}
+.controls{display:flex;gap:18px;flex-wrap:wrap;margin-top:12px}
+.group{display:grid;gap:6px;min-width:0}
+.group > span{font:600 11.5px var(--f-mono);letter-spacing:.07em;text-transform:uppercase;color:var(--mute)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex-wrap:wrap}
+.seg button{border:0;background:var(--panel);padding:6px 11px;cursor:pointer;font-size:13.5px}
+.seg button + button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.toggles{display:flex;gap:6px;flex-wrap:wrap}
+.tg{font-size:13px;padding:5px 10px;border-radius:999px;border:1px solid var(--line);background:var(--panel);cursor:pointer}
+.tg[aria-pressed="true"]{border-color:var(--path);background:color-mix(in srgb,var(--path) 14%,var(--panel))}
+.tg[aria-pressed="true"]::before{content:"✓ ";font-weight:600}
+select{padding:6px 8px;border-radius:8px;border:1px solid var(--line);background:var(--panel)}
+.diagram{overflow-x:auto;padding:0}
+.diagram svg{display:block;width:100%;min-width:880px;height:auto}
+.legend{display:flex;gap:14px;flex-wrap:wrap;padding:10px 14px;border-top:1px solid var(--line);font-size:12.5px;color:var(--mute)}
+.legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.band-t{font:700 14px var(--f-display);fill:var(--ink)}
+.band-s{font:400 11px var(--f-body);fill:var(--mute)}
+.nd rect{fill:var(--panel);stroke-width:1.3}
+.nd text{font:500 11.5px var(--f-mono);fill:var(--mute);pointer-events:none}
+.nd.on rect{stroke-width:2.4}
+.nd.on text{fill:var(--ink);font-weight:600}
+.nd.off rect{stroke-opacity:.35}.nd.off text{opacity:.45}
+.nd.skip rect{stroke-dasharray:4 3;fill:transparent}
+.nd.skip text{fill:var(--mute)}
+.nd.cur rect{stroke:var(--path)!important;stroke-width:3.2}
+.nd{cursor:pointer}
+.edge{fill:none;stroke:var(--path);stroke-width:2.4;stroke-dasharray:7 5;animation:flow 1.1s linear infinite;opacity:.95}
+@keyframes flow{to{stroke-dashoffset:-24}}
+@media (prefers-reduced-motion: reduce){.edge{animation:none;stroke-dasharray:none}}
+.badge circle{fill:var(--path)}
+.badge text{font:700 10.5px var(--f-mono);fill:#fff;text-anchor:middle}
+.gate circle{fill:var(--gate)}
+.steps{list-style:none;margin:0;padding:0;display:grid;gap:0}
+.step{display:grid;grid-template-columns:38px minmax(0,1fr);gap:10px;padding:12px 4px;border-top:1px solid var(--line)}
+.step:first-child{border-top:0}
+.step .num{width:28px;height:28px;border-radius:50%;background:var(--path);color:#fff;display:grid;place-items:center;font:700 12.5px var(--f-mono)}
+.step.skipped .num{background:transparent;color:var(--mute);border:1.5px dashed var(--line)}
+.step.skipped{color:var(--mute)}
+.step h3{margin:0;font:600 15px var(--f-mono);display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.load{font:500 11px var(--f-mono);padding:1px 7px;border-radius:999px;border:1px solid currentColor}
+.gtag{font:600 11px var(--f-mono);padding:1px 7px;border-radius:999px;background:color-mix(in srgb,var(--gate) 16%,transparent);color:var(--gate)}
+.step p{margin:3px 0 0}
+.out{font-size:13.5px;color:var(--mute)}
+.out b{color:var(--ink);font-weight:600}
+.step button.focus{background:none;border:0;padding:0;cursor:pointer;color:inherit;font:inherit;text-align:left}
+.yield{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.yield h3{margin:0 0 6px;font:700 17px var(--f-display)}
+.yield ul{margin:0;padding-left:18px;display:grid;gap:4px}
+.checks{list-style:none;margin:12px 0 0;padding:0;display:grid;gap:8px}
+.checks li{display:grid;grid-template-columns:62px minmax(0,1fr);gap:10px;align-items:start;font-size:14px}
+.pill{font:600 11.5px var(--f-mono);text-align:center;padding:2px 0;border-radius:6px}
+.pass{background:color-mix(in srgb,#2f9e44 18%,transparent);color:#2f9e44}
+.warn{background:color-mix(in srgb,#e8590c 18%,transparent);color:var(--path)}
+.info{background:var(--band);color:var(--mute)}
+.ctag{font:500 11px var(--f-mono);padding:1px 7px;border-radius:999px;background:var(--band);color:var(--mute)}
+.views{display:flex;gap:6px}
+.views button{font-weight:500;padding:7px 14px;border-radius:999px;border:1px solid var(--line);background:var(--panel);cursor:pointer}
+.views button[aria-selected="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.fired{display:grid;gap:10px;border-left:4px solid var(--path)}
+.fired .who{display:flex;gap:6px 14px;flex-wrap:wrap;align-items:baseline;font-size:14px}
+.fired .who b{font-size:16px}
+.fired .task{font:600 18px/1.3 var(--f-display);margin:0}
+.fired a{color:var(--accent)}
+.advice{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px 14px;align-items:start;padding:12px;border-radius:10px;background:var(--band2);border:1px solid var(--line)}
+.verdict{font:700 12px var(--f-mono);letter-spacing:.06em;padding:5px 10px;border-radius:6px;white-space:nowrap}
+.v-stay{background:color-mix(in srgb,#2f9e44 20%,transparent);color:#2f9e44}
+.v-compact{background:color-mix(in srgb,#e8a40c 24%,transparent);color:var(--ink)}
+.v-new{background:color-mix(in srgb,var(--accent) 18%,transparent);color:var(--accent)}
+.v-stop{background:var(--gate);color:#fff}
+.advice p{margin:0}
+.nums{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--mute);margin-top:6px}
+.nums b{color:var(--ink);font-family:var(--f-mono)}
+.leave{font-size:13px;color:var(--mute);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.leave button{font-size:13px;padding:4px 10px;border-radius:6px;border:1px solid var(--line);background:var(--panel);cursor:pointer}
+.tablewrap{overflow-x:auto}
+#history table{border-collapse:collapse;width:100%;min-width:760px;font-size:13.5px;margin-top:10px}
+#history th,#history td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+#history th{font:600 11px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--mute)}
+#history td button{font-size:13px;padding:4px 10px;border-radius:6px;border:1px solid var(--line);background:var(--panel);cursor:pointer}
+.mono{font-family:var(--f-mono);font-size:.92em}
+.note{color:var(--mute);font-size:13px;margin:0}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Request Preview</h1>
+    <p class="sub">Type what you'd ask the agent. See which skills the router will run, in what order, where it stops to ask you, and what you get at the end, before anything runs.</p>
+  </header>
+
+  <div class="views" role="tablist" aria-label="Views">
+    <button role="tab" id="tab-preview" aria-selected="true">Preview</button>
+    <button role="tab" id="tab-history" aria-selected="false">History <span id="hcount"></span></button>
+  </div>
+
+  <section class="card fired" id="fired" hidden aria-live="polite"></section>
+
+  <div class="ask">
+    <input id="q" type="text" aria-label="Your request" value="make the PR ready">
+    <button class="btn" id="go">Preview</button>
+    <p class="matched" id="matched" aria-live="polite"></p>
+  </div>
+
+  <section class="card" id="history" hidden>
+    <div class="head"><div><h2>Fired plans</h2><p>Every plan a session showed you, newest first. Open one to see it again.</p></div></div>
+    <div class="tablewrap"><table><thead><tr><th>When</th><th>Session</th><th>Task</th><th>Request</th><th>Advice</th><th>Steps</th><th></th></tr></thead><tbody id="hbody"></tbody></table></div>
+    <p class="note" id="hnote">Loading…</p>
+  </section>
+
+  <div class="layout" id="previewview">
+    <nav class="reqs" id="reqs" aria-label="Top 20 request types"><h2>Top 20 requests</h2></nav>
+    <div class="col">
+      <section class="card">
+        <div class="head">
+          <div><h2 id="rt"></h2><p id="rd"></p></div>
+          <div class="stats" id="stats"></div>
+        </div>
+        <div class="controls">
+          <div class="group"><span>How hands-on</span><div class="seg" id="mode"></div></div>
+          <div class="group" id="branchg" hidden><span>The ticket turns out to be</span><select id="branch" aria-label="Ticket type"></select></div>
+          <div class="group" style="flex:1 1 300px"><span>What the change touches</span><div class="toggles" id="conds"></div></div>
+        </div>
+      </section>
+
+      <section class="card diagram" aria-label="Flow diagram">
+        <svg id="svg" role="img" aria-labelledby="rt"></svg>
+        <div class="legend" id="legend"></div>
+      </section>
+
+      <section class="card">
+        <ol class="steps" id="steps"></ol>
+      </section>
+
+      <section class="card yield">
+        <div><h3>What you get</h3><ul id="gets"></ul></div>
+        <div><h3>Where it stops for you</h3><ul id="gates"></ul></div>
+        <div><h3>What gets loaded</h3><ul id="loads"></ul></div>
+      </section>
+
+      <section class="card">
+        <div class="head"><div><h2 style="font-size:20px">Context check</h2><p>Does this run keep the main conversation small? Sizes are the skills' real SKILL.md files (~ = estimated); tokens ≈ bytes ÷ 4.</p></div><div class="stats" id="ctxstats"></div></div>
+        <ul class="checks" id="checks"></ul>
+      </section>
+      <p class="note">This preview follows the skill-router pipelines. Skills load only when their step starts: <b>installed</b> ones are listed by name and load on use, <b>on demand</b> ones are fetched with <span class="mono">npx skills use</span> and not installed, <b>optional tools</b> are used only if present.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+const DATA = __DATA__;
+const LOAD = DATA.loads; LOAD.custom = {t:"added for this task", c:"--l-yours"};
+const BANDS = DATA.bands;
+const SK = Object.fromEntries(Object.entries(DATA.skills).map(([id,v]) => [id,[v.band,v.load,v.source]]));
+const SIZE = Object.fromEntries(Object.entries(DATA.skills).filter(([,v]) => v.size).map(([id,v]) => [id,v.size]));
+const CTX = Object.fromEntries(Object.entries(DATA.skills).map(([id,v]) => [id,v.ctx]));
+const CONDS = DATA.conds;
+const toS = x => ({skill:x.s, does:x.does, out:x.out, cond:x.cond, gate:x.gate});
+const PR = () => DATA.prReady.map(toS);
+const REQ = DATA.requests.map(r => [r.id, r.title, r.example, r.desc, r.keywords, r.conds, r.steps.flatMap(x => x.pr ? PR() : [toS(x)])]);
+const BRANCHES = DATA.branches, MODES = DATA.modes;
+const EST = 5000; const HEAVY = 10000;
+const sizeOf = id => SIZE[id] ?? EST;
+const isSub = id => id !== "skill-router" && id !== "ask-you" && ((CTX[id]||[]).includes("sub") || sizeOf(id) > HEAVY);
+
+/* ---------- state ---------- */
+const $ = s => document.querySelector(s);
+const esc = t => String(t).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const byId = Object.fromEntries(REQ.map(r => [r[0], {id:r[0], t:r[1], ex:r[2], d:r[3], k:r[4], conds:r[5], steps:r[6]}]));
+let cur = "prready", mode = "auto", branch = "bug", conds = {};
+let P = null, PCODE = null, PSTEPS = null, leftPlan = false;   /* P = plan fired by a session (from the link) */
+const LOADC = {b:"builtin", i:"installed", o:"ondemand", t:"tool", y:"yours", c:"custom"};
+const GATECODE = {1:"asks you", 2:"one-way door: asks first", 3:"waits for your approval", 4:"pauses after"};
+
+function defaultsFor(r, b){ const base = byId[r] ? byId[r].steps : []; return r === "ticket" ? [...base, ...byId[b || "bug"].steps.filter(s => s.skill !== "skill-router")] : base; }
+function planFromPayload(p){
+  const defs = defaultsFor(p.r, p.b), used = defs.map(() => false);
+  return (Array.isArray(p.st) ? p.st : []).map(row => {
+    const [skill, on, g, ld, does, out] = row; let base = null;
+    if (does === undefined) { const i = defs.findIndex((d,k) => !used[k] && d.skill === skill); if (i >= 0) { used[i] = true; base = defs[i]; } }
+    return {skill:String(skill), does: does ?? (base ? base.does : ""), out: out ?? (base ? base.out : ""), cond: base ? base.cond : undefined, pOn: !!on, pGate: GATECODE[g] || null, pLoad: LOADC[ld] || null, custom: does !== undefined};
+  });
+}
+function stepsFor(){
+  if (P) return PSTEPS;
+  const r = byId[cur];
+  if (cur !== "ticket") return r.steps;
+  return [...r.steps, ...byId[branch].steps.filter(s => s.skill !== "skill-router")];
+}
+function evaluate(){
+  if (P) return PSTEPS.map(s => ({...s, on: s.pOn, gateText: s.pGate}));
+  return stepsFor().map(s => {
+    const on = !s.cond || !!conds[s.cond];
+    let gate = null;
+    if (on) {
+      if (s.gate === "always") gate = "asks you";
+      else if (s.gate === "oneway") gate = "one-way door: asks first";
+      else if (s.gate === "plan" && mode !== "auto") gate = "waits for your approval";
+      else if (mode === "step") gate = "pauses after";
+    }
+    return {...s, on, gateText:gate};
+  });
+}
+
+/* ---------- request list ---------- */
+REQ.forEach((r,i) => {
+  const b = document.createElement("button"); b.className="req"; b.dataset.id=r[0];
+  b.innerHTML = `<span class="n">${String(i+1).padStart(2,"0")}</span><span><b>${esc(r[1])}</b><small>“${esc(r[2])}”</small></span>`;
+  b.onclick = () => { leavePlan(); $("#q").value = r[2]; pick(r[0], "Picked from the list."); };
+  $("#reqs").appendChild(b);
+});
+MODES.forEach(([id,t]) => { const b=document.createElement("button"); b.textContent=t; b.dataset.m=id; b.onclick=()=>{ leavePlan(); mode=id; render(); }; $("#mode").appendChild(b); });
+BRANCHES.forEach(id => { const o=document.createElement("option"); o.value=id; o.textContent=byId[id].t; $("#branch").appendChild(o); });
+$("#branch").onchange = e => { leavePlan(); branch = e.target.value; render(); };
+Object.entries(LOAD).forEach(([k,v]) => $("#legend").insertAdjacentHTML("beforeend", `<span><i style="border:2px solid var(${v.c})"></i>${v.t}</span>`));
+$("#legend").insertAdjacentHTML("beforeend", `<span><i style="background:var(--path)"></i>on this path</span><span><i style="background:var(--gate);border-radius:50%"></i>stops for you</span><span><i style="border:1.5px dashed var(--mute)"></i>skipped (condition off)</span>`);
+
+function pick(id, why){
+  cur = id; conds = {...byId[id].conds};
+  $("#matched").textContent = why || "";
+  if (!P && !PCODE) { try { history.replaceState(null, "", "#r-" + id); } catch(e) {} }
+  render();
+}
+function route(){
+  const q = " " + $("#q").value.toLowerCase() + " ";
+  if (/#\d+|\/issues\/\d+|linear\.app|atlassian\.net/.test(q)) return pick("ticket", "Looks like a ticket reference, so the ticket intake runs first.");
+  let best=null, hits=[];
+  REQ.forEach(r => { const h = r[4].filter(k => q.includes(k)); const score = h.reduce((a,k)=>a+k.length,0), bs = hits.reduce((a,k)=>a+k.length,0); if (score > bs) { best=r[0]; hits=h; } });
+  if (!best) return pick("feature", "No clear match, so the default (Build a feature). Pick another request on the left if it's something else.");
+  pick(best, `Matched “${hits.join("”, “")}”.`);
+}
+$("#go").onclick = () => { leavePlan(); route(); }; $("#q").addEventListener("keydown", e => { if (e.key === "Enter") { leavePlan(); route(); } });
+
+/* ---------- diagram ---------- */
+const NW=168, NH=30, GX=14, ROWH=44, LABW=120, PER=6, PADT=14;
+const bandNodes = BANDS.map(() => []);
+Object.entries(SK).forEach(([id,v]) => bandNodes[v[0]].push(id));
+const pos = {}; let y = PADT; const bandY = [];
+bandNodes.forEach((ids, b) => {
+  const rows = Math.ceil(ids.length / PER); const h = rows*ROWH + 22;
+  bandY.push([y, h]);
+  ids.forEach((id, i) => { const r = Math.floor(i/PER), c = i%PER; pos[id] = {x: LABW + 10 + c*(NW+GX), y: y + 14 + r*ROWH}; });
+  y += h + 6;
+});
+const VW = LABW + 10 + PER*(NW+GX) + 10, VH = y + 4;
+const svg = $("#svg"); svg.setAttribute("viewBox", `0 0 ${VW} ${VH}`);
+const NS = "http://www.w3.org/2000/svg";
+const mk = (t,a,p) => { const e=document.createElementNS(NS,t); for (const k in a) e.setAttribute(k,a[k]); p && p.appendChild(e); return e; };
+BANDS.forEach(([t,s], b) => {
+  const [by, bh] = bandY[b];
+  mk("rect", {x:0, y:by, width:VW, height:bh, rx:8, fill: b%2 ? "var(--band2)" : "var(--band)"}, svg);
+  mk("text", {x:12, y:by+24, class:"band-t"}, svg).textContent = t;
+  mk("text", {x:12, y:by+40, class:"band-s"}, svg).textContent = s;
+});
+const gE = mk("g", {}, svg), gN = mk("g", {}, svg), gB = mk("g", {}, svg);
+const nodeEl = {};
+Object.keys(SK).forEach(id => {
+  const p = pos[id], L = LOAD[SK[id][1]];
+  const g = mk("g", {class:"nd", transform:`translate(${p.x},${p.y})`, tabindex:"0", role:"button", "aria-label": id}, gN);
+  mk("rect", {width:NW, height:NH, rx:7, stroke:`var(${L.c})`}, g);
+  mk("text", {x:10, y:NH/2+4}, g).textContent = id.length > 22 ? id.slice(0,21)+"…" : id;
+  g.addEventListener("click", () => focusSkill(id));
+  g.addEventListener("keydown", e => { if (e.key==="Enter"||e.key===" ") { e.preventDefault(); focusSkill(id); } });
+  nodeEl[id] = g;
+});
+function edgePath(a, b){
+  const A = pos[a], B = pos[b];
+  const ax = A.x + NW/2, ay = A.y + NH, bx = B.x + NW/2, by = B.y;
+  if (B.y > A.y + 4) { const m = (by-ay)/2; return `M${ax},${ay} C${ax},${ay+m} ${bx},${by-m} ${bx},${by}`; }
+  if (Math.abs(B.y - A.y) <= 4) { // same row: arc below
+    const y1 = A.y + NH, d = Math.max(16, Math.abs(bx-ax)*0.18); return `M${ax},${y1} C${ax},${y1+d} ${bx},${y1+d} ${bx},${y1}`;
+  }
+  // going back up: leave from the right side, loop up
+  const x1 = A.x + NW, y1 = A.y + NH/2, x2 = B.x + NW, y2 = B.y + NH/2, out = Math.max(x1,x2) + 26;
+  return `M${x1},${y1} C${out},${y1} ${out},${y2} ${x2},${y2}`;
+}
+function focusSkill(id){
+  const li = document.querySelector(`.step[data-skill="${CSS.escape(id)}"]`);
+  if (li) { li.scrollIntoView({behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block:"center"}); li.querySelector("button.focus")?.focus(); }
+}
+
+const CTAG = {sub:"in a subagent", file:"saved to a file", diff:"diff only", query:"query, not file reads"};
+function ctxTags(id){ const t = [...new Set([...(CTX[id]||[]), ...(isSub(id) && sizeOf(id) > HEAVY ? ["sub"] : [])])]; return t.map(k => `<span class="ctag">${CTAG[k]}</span>`).join("") + `<span class="ctag">${SIZE[id] ? "" : "~"}${(sizeOf(id)/1000).toFixed(1)} KB</span>`; }
+function contextCheck(live){
+  const skills = [...new Set(live.map(s => s.skill))];
+  const main = skills.filter(id => !isSub(id)), sub = skills.filter(isSub);
+  const kb = ids => ids.reduce((a,id) => a + sizeOf(id), 0);
+  const tok = b => Math.round(b/4/100)/10 + "k";
+  const allIn = kb(skills), mainIn = kb(main);
+  $("#ctxstats").innerHTML = [[tok(mainIn),"tokens in main chat"],[tok(kb(sub)),"in subagents"],[tok(allIn),"if all ran inline"]].map(([v,t]) => `<div class="stat"><b>${v}</b><span>${t}</span></div>`).join("");
+  const total = Object.keys(SK).length, C = [];
+  C.push(["pass", `Lazy loading: ${skills.length} of ${total} skills load, each when its step starts; the other ${total - skills.length} stay unloaded (installed ones are listed by name only).`]);
+  const heavy = skills.filter(id => isSub(id) && sizeOf(id) > HEAVY);
+  C.push([heavy.length ? "pass" : "info", heavy.length ? `Heavy skills run in subagents, so their text never enters the main chat: ${heavy.join(", ")} (each over 10 KB).` : "No heavy skills (over 10 KB) on this path."]);
+  const reads = skills.filter(id => (CTX[id]||[]).includes("sub") && sizeOf(id) <= HEAVY);
+  if (reads.length) C.push(["pass", `Big reads (many files, logs, dependency trees) happen in subagents that return a short summary: ${reads.join(", ")}.`]);
+  const files = [...new Set(live.filter(s => (CTX[s.skill]||[]).includes("file")).map(s => s.skill))];
+  C.push([files.length ? "pass" : "info", files.length ? `Results are saved to files (spec, ADR, notes, plans), and the chat gets a link instead of the full text: ${files.join(", ")}.` : "Nothing on this path needs saving to a file."]);
+  if (live.some(s => (CTX[s.skill]||[]).includes("diff"))) C.push(["pass", "Review and cleanup are limited to the diff, not the whole repo."]);
+  const wantsGraph = live.some(s => s.skill === "graphify") || stepsFor().some(s => s.skill === "graphify");
+  if (wantsGraph) C.push([conds.tools ? "pass" : "warn", conds.tools ? "Code lookups use graphify / LSP queries instead of grepping and reading whole files." : "graphify isn't installed: the agent will grep and read whole files to find callers. Install graphify to replace that with small queries."]);
+  if (live.length > 8) C.push(["pass", `Long run (${live.length} steps): a progress file (.claude/progress/<branch>.md) is updated after each stage, so compacting the context or resuming in a new session loses nothing.`]);
+  else C.push(["info", "Short run: no progress file needed."]);
+  if (mainIn/4 > 8000) C.push(["warn", `Main chat still takes ${tok(mainIn)} tokens of skill text. Biggest in-chat items: ${main.filter(id => id !== "skill-router").sort((a,b) => sizeOf(b)-sizeOf(a)).slice(0,2).join(" and ")}; run them in subagents if the session is already long. (Built-in skill sizes are estimates.)`]);
+  else C.push(["pass", `Main chat holds ${tok(mainIn)} tokens of skill text, under the 8k budget.`]);
+  C.push(["info", "Setup (checked once, not per run): skillOverrides set to name-only, unused plugins disabled, CLAUDE.md kept short with detail moved to files it points to. /context shows the real numbers."]);
+  $("#checks").innerHTML = C.map(([k,t]) => `<li><span class="pill ${k}">${k}</span><span>${esc(t)}</span></li>`).join("");
+}
+/* ---------- render ---------- */
+function render(){
+  const r = byId[cur], steps = evaluate();
+  document.querySelectorAll(".req").forEach(b => b.setAttribute("aria-current", b.dataset.id === cur ? "true" : "false"));
+  document.querySelectorAll("#mode button").forEach(b => b.setAttribute("aria-pressed", b.dataset.m === mode ? "true" : "false"));
+  $("#branchg").hidden = cur !== "ticket";
+  $("#rt").textContent = (cur === "ticket" ? `${r.t} → ${byId[branch].t}` : r.t) + (P ? " · exact plan" : "");
+  renderFired();
+  $("#rd").textContent = r.d;
+
+  // condition toggles: only the ones this path uses
+  const used = [...new Set((P ? defaultsFor(cur, branch) : stepsFor()).map(s => s.cond).filter(Boolean))];
+  $("#conds").innerHTML = used.length ? "" : '<span class="note">Nothing conditional on this path.</span>';
+  used.forEach(c => { const b=document.createElement("button"); b.className="tg"; b.textContent=CONDS[c]; b.setAttribute("aria-pressed", conds[c] ? "true" : "false"); b.onclick=()=>{ leavePlan(); conds[c]=!conds[c]; render(); }; $("#conds").appendChild(b); });
+
+  // diagram
+  const live = steps.filter(s => s.on);
+  const liveD = live.filter(s => pos[s.skill]);
+  const order = {}; live.forEach((s,i) => { if (pos[s.skill]) (order[s.skill] ||= []).push(i+1); });
+  const skipped = new Set(steps.filter(s => !s.on).map(s => s.skill).filter(k => !order[k] && pos[k]));
+  Object.entries(nodeEl).forEach(([id,g]) => {
+    g.classList.toggle("on", !!order[id]); g.classList.toggle("skip", skipped.has(id)); g.classList.toggle("off", !order[id] && !skipped.has(id));
+    g.setAttribute("aria-label", `${id}${order[id] ? ", step " + order[id].join(" and ") : skipped.has(id) ? ", skipped" : ", not used"}`);
+  });
+  gE.innerHTML = ""; gB.innerHTML = "";
+  liveD.forEach((s,i) => { const n = liveD[i+1]; if (n && n.skill !== s.skill) mk("path", {d: edgePath(s.skill, n.skill), class:"edge"}, gE); });
+  Object.entries(order).forEach(([id, nums]) => {
+    const p = pos[id]; const label = nums.length > 2 ? nums[0] + "…" + nums[nums.length-1] : nums.join(",");
+    const w = Math.max(20, label.length*7 + 10);
+    const g = mk("g", {class:"badge", transform:`translate(${p.x + NW - w/2 + 4},${p.y})`}, gB);
+    mk("rect", {x:-w/2, y:-9, width:w, height:18, rx:9, fill:"var(--path)"}, g);
+    mk("text", {x:0, y:4}, g).textContent = label;
+    if (live.some(s => s.skill === id && s.gateText && s.gateText !== "pauses after")) { const gg = mk("g", {class:"gate", transform:`translate(${p.x+4},${p.y})`}, gB); mk("circle", {r:6}, gg); }
+  });
+
+  // steps
+  let n = 0;
+  $("#steps").innerHTML = steps.map(s => {
+    const L = s.pLoad ? LOAD[s.pLoad] : SK[s.skill] ? LOAD[SK[s.skill][1]] : LOAD.custom;
+    const num = s.on ? ++n : "–";
+    return `<li class="step${s.on ? "" : " skipped"}" data-skill="${esc(s.skill)}">
+      <span class="num">${num}</span>
+      <div>
+        <h3><button class="focus">${esc(s.skill)}</button><span class="load" style="color:var(${L.c})">${L.t}</span>${s.gateText ? `<span class="gtag">${esc(s.gateText)}</span>` : ""}${s.on ? ctxTags(s.skill) : ""}</h3>
+        <p>${esc(s.does)}</p>
+        <p class="out">${s.on ? `→ <b>${esc(s.out)}</b>` : (s.cond && !P ? `skipped: the change doesn't touch ${esc(CONDS[s.cond])}` : s.cond ? `skipped: condition off (${esc(CONDS[s.cond])})` : "skipped for this task")} · <span class="mono">${esc(SK[s.skill] ? SK[s.skill][2] : "added for this task")}</span></p>
+      </div></li>`;
+  }).join("");
+
+  // stats + summaries
+  const skills = [...new Set(live.map(s => s.skill))];
+  const loadOf = id => { const st = live.find(s => s.skill === id); return st && st.pLoad ? st.pLoad : SK[id] ? SK[id][1] : "custom"; };
+  const byLoad = k => skills.filter(id => loadOf(id) === k);
+  const gates = live.filter(s => s.gateText && s.gateText !== "pauses after");
+  $("#stats").innerHTML = [[live.length,"steps"],[skills.length,"skills loaded"],[byLoad("ondemand").length,"fetched on demand"],[mode==="step" ? live.length : gates.length,"times it asks you"]]
+    .map(([v,t]) => `<div class="stat"><b>${v}</b><span>${t}</span></div>`).join("");
+  const last = live[live.length-1];
+  const outs = [...new Set(live.map(s => s.out))];
+  $("#gets").innerHTML = outs.slice(-6).map((o,i,a) => `<li>${i === a.length-1 ? "<b>" + esc(o) + "</b>" : esc(o)}</li>`).join("") + (outs.length > 6 ? `<li class="note">and ${outs.length-6} earlier outputs (see steps)</li>` : "");
+  $("#gates").innerHTML = (mode === "step" ? `<li>After every one of the ${live.length} steps (step-by-step mode)</li>` : "") +
+    (gates.length ? gates.map(s => `<li><span class="mono">${esc(s.skill)}</span>: ${esc(s.gateText)}</li>`).join("") : (mode === "step" ? "" : "<li>Nowhere: it runs to the end and reports.</li>"));
+  $("#loads").innerHTML = Object.keys(LOAD).map(k => { const ids = byLoad(k); return ids.length ? `<li><b>${LOAD[k].t}</b> (${ids.length}): <span class="mono">${ids.map(esc).join(", ")}</span></li>` : ""; }).join("") +
+    `<li class="note">Each loads only when its step starts. Skills not on this path stay unloaded.</li>`;
+  contextCheck(live);
+}
+
+/* ---------- fired plans: decode the link ---------- */
+const B32 = "abcdefghijklmnopqrstuvwxyz234567";
+function unb32(str){ let bits=0, val=0; const out=[]; for (const ch of str) { const i=B32.indexOf(ch); if (i<0) throw new Error("bad link"); val=((val<<5)|i)&0xffffff; bits+=5; if (bits>=8) { out.push((val>>>(bits-8))&255); bits-=8; } } return new Uint8Array(out); }
+async function inflate(bytes){ const ds = new DecompressionStream("deflate-raw"); const t = await new Response(new Blob([bytes]).stream().pipeThrough(ds)).text(); return JSON.parse(t); }
+async function loadCode(code){
+  try {
+    const p = await inflate(unb32(code));
+    if (!p || p.v !== 1 || !byId[p.r]) throw new Error("unknown plan");
+    P = p; PCODE = code; leftPlan = false;
+    cur = p.r; mode = MODES.some(m => m[0] === p.m) ? p.m : "auto"; branch = byId[p.b] ? p.b : "bug";
+    conds = Object.fromEntries((p.c || []).map(c => [c, 1]));
+    PSTEPS = planFromPayload(p);
+    $("#q").value = p.t || byId[p.r].ex; $("#matched").textContent = "";
+    render(); saveRun();
+  } catch (e) {
+    P = null; PCODE = null;
+    $("#matched").textContent = "This link's plan couldn't be read (it may be cut off). Showing the default instead.";
+    route();
+  }
+}
+function leavePlan(){ if (P) { P = null; leftPlan = true; } }
+function fmtTime(ts){ try { return new Date(ts*1000).toLocaleString([], {dateStyle:"medium", timeStyle:"short"}); } catch(e) { return ""; } }
+const kTok = t => t == null ? "?" : t >= 1e6 ? (t/1e6).toFixed(1) + "M" : Math.round(t/1000) + "k";
+const VERD = {stay:["STAY","v-stay","Stay in this session"], compact:["COMPACT","v-compact","Run /compact, then stay"], new:["NEW SESSION","v-new","Start a new session"], stop:["STOP","v-stop","Stopped: start a new session, or say “continue here”"]};
+function sessionLink(p){ return p.rid && /^session_[A-Za-z0-9]+$/.test(p.rid) ? `<a href="https://claude.ai/code/${p.rid}" target="_blank" rel="noopener">${esc(p.rid)}</a>` : (p.sid ? `<span class="mono">${esc(p.sid)}</span>` : "unknown"); }
+function renderFired(){
+  const box = $("#fired");
+  const p = P || (leftPlan && PCODE ? {_left:true} : null);
+  if (!p) { box.hidden = true; return; }
+  box.hidden = false;
+  if (p._left) { box.innerHTML = `<div class="leave">You're exploring other options; this isn't the session's plan any more. <button id="back">Back to the session's plan</button></div>`; $("#back").onclick = () => loadCode(PCODE); return; }
+  const onSteps = PSTEPS.filter(s => s.pOn).length;
+  let adv = "";
+  if (p.a && VERD[p.a.v]) {
+    const [lab, cls, act] = VERD[p.a.v];
+    adv = `<div class="advice"><span class="verdict ${cls}">${lab}</span><div><p><b>${esc(act)}.</b> ${esc(p.a.y || "")}</p>
+      <div class="nums">${p.a.p ? `<span>Previous task: <b>${esc(p.a.p)}</b>${p.a.d ? " (uncommitted changes)" : ""}</span>` : ""}
+      ${p.a.s != null ? `<span>Stay: about <b>${kTok(p.a.s)}</b> tokens re-read over ~${p.a.u} turns</span>` : ""}
+      ${p.a.f != null ? `<span>New session: about <b>${kTok(p.a.f)}</b></span>` : ""}</div></div></div>`;
+  } else if ((p.n || 1) > 1) adv = `<p class="note">Same goal as this session's earlier work, so no session advice.</p>`;
+  box.innerHTML = `
+    <div class="who"><span>Plan from session</span><b>${esc(p.sn || "unnamed session")}</b><span>${sessionLink(p)}</span>${p.rid && p.sid ? `<span class="note mono">local ${esc(p.sid)}</span>` : ""}<span class="note">${esc(fmtTime(p.ts))}</span></div>
+    ${p.t ? `<p class="task">“${esc(p.t)}”</p>` : ""}
+    <div class="who"><span>Context now: <b class="mono">${kTok(p.ctx)}</b> tokens</span><span>Task ${p.n || 1} in this session</span><span>${onSteps} steps</span><span>${p.w ? "Claude waits for your OK before starting." : "Tiny plan: Claude starts right away."}</span></div>
+    ${adv}`;
+}
+
+/* ---------- history (shared db) ---------- */
+let DB = null, savedFor = null;
+function hashStr(t){ let h = 5381; for (let i = 0; i < t.length; i++) h = ((h << 5) + h + t.charCodeAt(i)) >>> 0; return h.toString(36); }
+async function saveRun(){
+  if (!DB || !P || savedFor === PCODE) return;
+  savedFor = PCODE;
+  try {
+    const ref = DB.collection("runs").doc("r" + hashStr(PCODE));
+    const snap = await ref.get(); if (snap.exists) return;
+    await ref.set({ts: Number(P.ts) || Math.floor(Date.now()/1000), sid: P.sid || null, rid: P.rid || null, sn: P.sn || null, task: P.t || null,
+      r: P.r, verdict: P.a ? P.a.v : null, steps: PSTEPS.filter(s => s.pOn).length, ctx: P.ctx ?? null, code: PCODE});
+  } catch (e) { /* history is optional */ }
+}
+function renderHistory(docs){
+  const rows = docs.map(d => d.data()).filter(Boolean);
+  $("#hcount").textContent = rows.length ? `(${rows.length})` : "";
+  $("#hnote").textContent = rows.length ? "" : "No plans yet. When a session fires a plan and you open its link, it's listed here.";
+  $("#hbody").innerHTML = rows.map((r, i) => {
+    const v = VERD[r.verdict]; const req = byId[r.r];
+    return `<tr><td>${esc(fmtTime(r.ts))}</td><td><b>${esc(r.sn || "unnamed")}</b><br>${sessionLink(r)}</td><td>${esc(r.task || "")}</td><td>${esc(req ? req.t : String(r.r))}</td>
+      <td>${v ? `<span class="verdict ${v[1]}">${v[0]}</span>` : "—"}</td><td class="mono">${Number(r.steps) || ""}</td>
+      <td>${typeof r.code === "string" && /^[a-z2-7]+$/.test(r.code) ? `<button data-code="${r.code}">Open</button>` : ""}</td></tr>`;
+  }).join("");
+  $("#hbody").querySelectorAll("[data-code]").forEach(b => b.onclick = () => { showView("preview"); location.hash = "z" + b.dataset.code; });
+}
+(async () => {
+  let t = setTimeout(() => { $("#hnote").textContent = "History isn't available here (open the page in claude.ai, signed in)."; }, 10000);
+  try { DB = window.claude && window.claude.use ? await window.claude.use("db") : null; } catch (e) { DB = null; }
+  if (!DB) { clearTimeout(t); $("#hnote").textContent = "History isn't available here (open the page in claude.ai, signed in)."; return; }
+  saveRun();
+  DB.collection("runs").orderBy("ts", "desc").limit(100).onSnapshot(snap => { clearTimeout(t); renderHistory(snap.docs); },
+    () => { clearTimeout(t); $("#hnote").textContent = "History couldn't be loaded."; });
+})();
+
+/* ---------- views + startup ---------- */
+function showView(v){
+  const hist = v === "history";
+  $("#tab-history").setAttribute("aria-selected", hist); $("#tab-preview").setAttribute("aria-selected", !hist);
+  $("#history").hidden = !hist; $("#previewview").hidden = hist; document.querySelector(".ask").hidden = hist; $("#fired").hidden = hist || !(P || (leftPlan && PCODE));
+}
+$("#tab-preview").onclick = () => showView("preview");
+$("#tab-history").onclick = () => showView("history");
+function fromHash(){
+  const h = location.hash || "";
+  if (/^#z[a-z2-7]+$/.test(h)) { if (h.slice(2) !== PCODE || !P) loadCode(h.slice(2)); return; }
+  const k = h.replace(/^#r-/, "");
+  if (byId[k]) { if (k !== cur || P) { leavePlan(); $("#q").value = byId[k].ex; pick(k, ""); } return; }
+  if (!P) route();
+}
+window.addEventListener("hashchange", fromHash);
+fromHash();
+</script>
